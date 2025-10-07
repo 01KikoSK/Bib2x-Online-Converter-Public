@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bib2x Online Converter — Single File</title>
+<style>
+  :root {
+    --bg: #0f141a;
+    --panel: #151b23;
+    --text: #e6edf3;
+    --muted: #9da7b1;
+    --accent: #2f81f7;
+    --ok: #2ea043;
+    --warn: #d29922;
+    --err: #f85149;
+    --border: #30363d;
+    --input: #0b0f14;
+    --code: #0b0f14;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--panel);
+    position: sticky; top: 0; z-index: 10;
+  }
+  header .title { font-weight: 700; letter-spacing: .2px; }
+  header .controls { display: flex; gap: 8px; align-items: center; }
+  select, button, input[type="file"] {
+    background: var(--input); color: var(--text); border: 1px solid var(--border);
+    padding: 8px 10px; border-radius: 6px; font-size: 14px;
+  }
+  button.primary { background: var(--accent); border-color: transparent; color: white; }
+  button.ok { background: var(--ok); border-color: transparent; color: white; }
+  button.warn { background: var(--warn); border-color: transparent; color: black; }
+  button.err { background: var(--err); border-color: transparent; color: white; }
+  main { padding: 16px; display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+  }
+  .card header { position: static; background: transparent; border-bottom: 1px solid var(--border); padding: 10px 12px; }
+  .card header .subtitle { color: var(--muted); font-size: 12px; }
+  textarea {
+    width: 100%; min-height: 300px; resize: vertical; background: var(--code); color: var(--text);
+    border: none; padding: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 13px; line-height: 1.45;
+  }
+  .toolbar {
+    display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--border); background: #11161c;
+  }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .hint { color: var(--muted); font-size: 12px; padding: 8px 12px; }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; padding: 10px; }
+  .kv label { color: var(--muted); }
+  .footer { padding: 12px 16px; color: var(--muted); font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="title">Bib2x Online Converter</div>
+    <div class="controls">
+      <label for="langSel" style="color:var(--muted);font-size:12px;">Lang:</label>
+      <select id="langSel" aria-label="Language">
+        <option value="en">English</option>
+        <option value="de">Deutsch</option>
+        <option value="es">Español</option>
+        <option value="cs">Čeština</option>
+        <option value="sk">Slovenčina</option>
+      </select>
+      <button id="saveCfg" title="Save settings">Save</button>
+      <button id="loadCfg" title="Load settings">Load</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="card">
+      <header>
+        <div id="inTitle">Input (BibTeX)</div>
+        <div class="subtitle" id="inSub">Paste your BibTeX or upload a file</div>
+      </header>
+      <textarea id="input" placeholder="@article{citekey,\n  title={An example},\n  author={Doe, John and Roe, Jane},\n  journal={Journal},\n  year={2021},\n  volume={12},\n  number={3},\n  pages={45-67},\n  doi={10.1234/example},\n  url={https://example.org}\n}"></textarea>
+      <div class="toolbar">
+        <div class="row">
+          <input type="file" id="fileIn" accept=".bib,.txt" />
+          <button id="loadFile" class="warn">Load file</button>
+          <button id="clearIn">Clear</button>
+          <button id="sampleIn">Insert sample</button>
+        </div>
+      </div>
+      <div class="hint" id="inHint">Supported: multiple BibTeX entries, authors separated by “and”</div>
+    </section>
+
+    <section class="card">
+      <header>
+        <div id="outTitle">Output</div>
+        <div class="subtitle" id="outSub">Choose target format and convert</div>
+      </header>
+      <div class="kv">
+        <label id="fmtLabel" for="fmtSel">Format:</label>
+        <select id="fmtSel">
+          <option value="ris">RIS</option>
+          <option value="csljson">CSL-JSON</option>
+          <option value="csv">CSV</option>
+          <option value="sanitize">Sanitized BibTeX</option>
+        </select>
+        <label id="optsLabel">Options:</label>
+        <div class="row">
+          <label><input type="checkbox" id="keepId" checked> <span id="keepIdLbl">Keep citekey as ID</span></label>
+          <label><input type="checkbox" id="strictPages"> <span id="strictPagesLbl">Strict pages split</span></label>
+          <label><input type="checkbox" id="normalizeAuthors" checked> <span id="normalizeAuthorsLbl">Normalize authors</span></label>
+        </div>
+      </div>
+      <div class="toolbar">
+        <div class="row">
+          <button id="convert" class="primary">Convert</button>
+          <button id="copyOut">Copy output</button>
+          <button id="downloadOut" class="ok">Download output</button>
+          <button id="clearOut">Clear output</button>
+        </div>
+      </div>
+      <textarea id="output" placeholder="Converted output will appear here..." readonly></textarea>
+      <div class="hint" id="outHint">Use Copy or Download to export your result</div>
+    </section>
+  </main>
+
+  <div class="footer" id="footer">Offline, single-file, no libraries. Built for accurate BibTeX → RIS / CSL-JSON / CSV.</div>
+
+<script>
+/* --- i18n --- */
+const i18n = {
+  en: {
+    inTitle: "Input (BibTeX)",
+    inSub: "Paste your BibTeX or upload a file",
+    inHint: "Supported: multiple BibTeX entries, authors separated by “and”",
+    outTitle: "Output",
+    outSub: "Choose target format and convert",
+    fmtLabel: "Format:",
+    optsLabel: "Options:",
+    keepIdLbl: "Keep citekey as ID",
+    strictPagesLbl: "Strict pages split",
+    normalizeAuthorsLbl: "Normalize authors",
+    convert: "Convert",
+    copyOut: "Copy output",
+    downloadOut: "Download output",
+    clearOut: "Clear output",
+    clearIn: "Clear",
+    sampleIn: "Insert sample",
+    loadFile: "Load file",
+    footer: "Offline, single-file, no libraries. Built for accurate BibTeX → RIS / CSL-JSON / CSV.",
+    saved: "Settings saved.",
+    loaded: "Settings loaded.",
+    copyOk: "Output copied.",
+    copyFail: "Copy failed.",
+    noInput: "Please provide BibTeX input.",
+    outHint: "Use Copy or Download to export your result",
+  },
+  de: {
+    inTitle: "Eingabe (BibTeX)",
+    inSub: "Fügen Sie Ihr BibTeX ein oder laden Sie eine Datei hoch",
+    inHint: "Unterstützt: mehrere BibTeX-Einträge, Autoren mit „and“ getrennt",
+    outTitle: "Ausgabe",
+    outSub: "Zielformat wählen und konvertieren",
+    fmtLabel: "Format:",
+    optsLabel: "Optionen:",
+    keepIdLbl: "Citekey als ID behalten",
+    strictPagesLbl: "Strikte Seitenaufteilung",
+    normalizeAuthorsLbl: "Autoren normalisieren",
+    convert: "Konvertieren",
+    copyOut: "Ausgabe kopieren",
+    downloadOut: "Ausgabe herunterladen",
+    clearOut: "Ausgabe löschen",
+    clearIn: "Löschen",
+    sampleIn: "Beispiel einfügen",
+    loadFile: "Datei laden",
+    footer: "Offline, Einzeldatei, keine Bibliotheken. Präzises BibTeX → RIS / CSL-JSON / CSV.",
+    saved: "Einstellungen gespeichert.",
+    loaded: "Einstellungen geladen.",
+    copyOk: "Ausgabe kopiert.",
+    copyFail: "Kopieren fehlgeschlagen.",
+    noInput: "Bitte BibTeX-Eingabe bereitstellen.",
+    outHint: "Verwenden Sie Kopieren oder Herunterladen, um das Ergebnis zu exportieren",
+  },
+  es: {
+    inTitle: "Entrada (BibTeX)",
+    inSub: "Pega tu BibTeX o sube un archivo",
+    inHint: "Soporta: múltiples entradas BibTeX, autores separados por “and”",
+    outTitle: "Salida",
+    outSub: "Elige el formato y convierte",
+    fmtLabel: "Formato:",
+    optsLabel: "Opciones:",
+    keepIdLbl: "Mantener citekey como ID",
+    strictPagesLbl: "Dividir páginas estrictamente",
+    normalizeAuthorsLbl: "Normalizar autores",
+    convert: "Convertir",
+    copyOut: "Copiar salida",
+    downloadOut: "Descargar salida",
+    clearOut: "Limpiar salida",
+    clearIn: "Limpiar",
+    sampleIn: "Insertar ejemplo",
+    loadFile: "Cargar archivo",
+    footer: "Offline, archivo único, sin librerías. BibTeX → RIS / CSL-JSON / CSV preciso.",
+    saved: "Configuración guardada.",
+    loaded: "Configuración cargada.",
+    copyOk: "Salida copiada.",
+    copyFail: "Error al copiar.",
+    noInput: "Por favor, proporciona entrada BibTeX.",
+    outHint: "Usa Copiar o Descargar para exportar el resultado",
+  },
+  cs: {
+    inTitle: "Vstup (BibTeX)",
+    inSub: "Vložte svůj BibTeX nebo nahrajte soubor",
+    inHint: "Podporováno: více BibTeX záznamů, autoři odděleni „and“",
+    outTitle: "Výstup",
+    outSub: "Zvolte cílový formát a převádějte",
+    fmtLabel: "Formát:",
+    optsLabel: "Možnosti:",
+    keepIdLbl: "Ponechat citekey jako ID",
+    strictPagesLbl: "Striktní dělení stránek",
+    normalizeAuthorsLbl: "Normalizovat autory",
+    convert: "Převést",
+    copyOut: "Kopírovat výstup",
+    downloadOut: "Stáhnout výstup",
+    clearOut: "Vyčistit výstup",
+    clearIn: "Vyčistit",
+    sampleIn: "Vložit vzorek",
+    loadFile: "Načíst soubor",
+    footer: "Offline, jednosouborové, bez knihoven. Přesné BibTeX → RIS / CSL-JSON / CSV.",
+    saved: "Nastavení uloženo.",
+    loaded: "Nastavení načteno.",
+    copyOk: "Výstup zkopírován.",
+    copyFail: "Kopírování selhalo.",
+    noInput: "Prosím, vložte BibTeX vstup.",
+    outHint: "Použijte Kopírovat nebo Stáhnout pro export výsledku",
+  },
+  sk: {
+    inTitle: "Vstup (BibTeX)",
+    inSub: "Vložte svoj BibTeX alebo nahrajte súbor",
+    inHint: "Podporované: viac BibTeX záznamov, autori oddelení „and“",
+    outTitle: "Výstup",
+    outSub: "Zvoľte cieľový formát a konvertujte",
+    fmtLabel: "Formát:",
+    optsLabel: "Možnosti:",
+    keepIdLbl: "Ponechať citekey ako ID",
+    strictPagesLbl: "Prísne delenie strán",
+    normalizeAuthorsLbl: "Normalizovať autorov",
+    convert: "Konvertovať",
+    copyOut: "Kopírovať výstup",
+    downloadOut: "Stiahnuť výstup",
+    clearOut: "Vyčistiť výstup",
+    clearIn: "Vyčistiť",
+    sampleIn: "Vložiť vzor",
+    loadFile: "Načítať súbor",
+    footer: "Offline, jednosúborové, bez knižníc. Presné BibTeX → RIS / CSL-JSON / CSV.",
+    saved: "Nastavenia uložené.",
+    loaded: "Nastavenia načítané.",
+    copyOk: "Výstup skopírovaný.",
+    copyFail: "Kopírovanie zlyhalo.",
+    noInput: "Prosím, vložte BibTeX vstup.",
+    outHint: "Použite Kopírovať alebo Stiahnuť na export výsledku",
+  }
+};
+
+function applyLang(l) {
+  const t = i18n[l] || i18n.en;
+  setText("inTitle", t.inTitle);
+  setText("inSub", t.inSub);
+  setText("inHint", t.inHint);
+  setText("outTitle", t.outTitle);
+  setText("outSub", t.outSub);
+  setText("fmtLabel", t.fmtLabel);
+  setText("optsLabel", t.optsLabel);
+  setText("keepIdLbl", t.keepIdLbl);
+  setText("strictPagesLbl", t.strictPagesLbl);
+  setText("normalizeAuthorsLbl", t.normalizeAuthorsLbl);
+  setText("convert", t.convert);
+  setText("copyOut", t.copyOut);
+  setText("downloadOut", t.downloadOut);
+  setText("clearOut", t.clearOut);
+  setText("clearIn", t.clearIn);
+  setText("sampleIn", t.sampleIn);
+  setText("loadFile", t.loadFile);
+  setText("footer", t.footer);
+  setText("outHint", t.outHint);
+}
+
+function setText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+/* --- Storage helpers --- */
+function saveCfg() {
+  const cfg = {
+    lang: document.getElementById("langSel").value,
+    fmt: document.getElementById("fmtSel").value,
+    keepId: document.getElementById("keepId").checked,
+    strictPages: document.getElementById("strictPages").checked,
+    normalizeAuthors: document.getElementById("normalizeAuthors").checked
+  };
+  localStorage.setItem("bib2x_cfg", JSON.stringify(cfg));
+  notify(i18n[document.getElementById("langSel").value].saved);
+}
+
+function loadCfg() {
+  const raw = localStorage.getItem("bib2x_cfg");
+  if (!raw) return;
+  try {
+    const cfg = JSON.parse(raw);
+    document.getElementById("langSel").value = cfg.lang || "en";
+    document.getElementById("fmtSel").value = cfg.fmt || "ris";
+    document.getElementById("keepId").checked = !!cfg.keepId;
+    document.getElementById("strictPages").checked = !!cfg.strictPages;
+    document.getElementById("normalizeAuthors").checked = !!cfg.normalizeAuthors;
+    applyLang(document.getElementById("langSel").value);
+    notify(i18n[document.getElementById("langSel").value].loaded);
+  } catch {}
+}
+
+/* --- Notifications (lightweight) --- */
+function notify(msg) {
+  const b = document.createElement("div");
+  b.textContent = msg;
+  b.style.position = "fixed";
+  b.style.bottom = "16px";
+  b.style.right = "16px";
+  b.style.background = "rgba(47,129,247,.95)";
+  b.style.color = "white";
+  b.style.padding = "8px 12px";
+  b.style.borderRadius = "8px";
+  b.style.boxShadow = "0 6px 24px rgba(0,0,0,.35)";
+  b.style.zIndex = "99";
+  document.body.appendChild(b);
+  setTimeout(()=> b.remove(), 1800);
+}
+
+/* --- BibTeX parsing --- */
+function parseBibTeX(text) {
+  // Split entries by leading @type{key,
+  const entries = [];
+  const cleaned = text.replace(/\r\n/g, "\n").trim();
+  const parts = cleaned.split(/\n(?=@\w+\s*\{)/).filter(Boolean);
+  for (let part of parts) {
+    const headMatch = part.match(/^@(\w+)\s*\{\s*([^,]+)\s*,/i);
+    if (!headMatch) continue;
+    const type = headMatch[1].toLowerCase();
+    const id = headMatch[2].trim();
+    const body = part.replace(/^@\w+\s*\{\s*[^,]+,/i, "").replace(/\}\s*$/,"").trim();
+
+    const fields = {};
+    // Match key = {value} or "value" or bare value, handling commas inside braces
+    // Strategy: iterate char-wise, split on top-level commas.
+    let i=0, level=0, token="", tokens=[];
+    while (i < body.length) {
+      const ch = body[i];
+      if (ch === '{') level++;
+      if (ch === '}') level = Math.max(0, level-1);
+      if (ch === ',' && level===0) { tokens.push(token); token=""; }
+      else { token += ch; }
+      i++;
+    }
+    if (token.trim()) tokens.push(token);
+
+    for (let t of tokens) {
+      const m = t.match(/^\s*([\w\-]+)\s*=\s*(.+)\s*$/);
+      if (!m) continue;
+      const key = m[1].toLowerCase();
+      let val = m[2].trim();
+      // Strip surrounding { } or " "
+      if ((val.startsWith("{") && val.endsWith("}")) || (val.startsWith("\"") && val.endsWith("\""))) {
+        val = val.slice(1, -1);
+      }
+      // Collapse whitespace
+      val = val.replace(/\s+\n\s+/g, " ").replace(/\s{2,}/g, " ").trim();
+      fields[key] = val;
+    }
+
+    entries.push({ type, id, fields });
+  }
+  return entries;
+}
+
+/* --- Helpers --- */
+function splitAuthors(s, normalize=true) {
+  if (!s) return [];
+  const parts = s.split(/\s+\band\b\s+/i).map(x=>x.trim()).filter(Boolean);
+  return parts.map(a => {
+    if (!normalize) return { raw: a };
+    // Attempt "Family, Given" or "Given Family"
+    if (a.includes(",")) {
+      const [family, given] = a.split(",").map(x=>x.trim());
+      return { family, given };
+    } else {
+      const bits = a.split(/\s+/);
+      if (bits.length===1) return { family: bits[0], given: "" };
+      const family = bits.pop();
+      const given = bits.join(" ");
+      return { family, given };
+    }
+  });
+}
+
+function splitPages(p, strict=false) {
+  if (!p) return { sp:"", ep:"" };
+  const m = p.match(/\b(\d+)\s*[-–—]\s*(\d+)\b/);
+  if (m) return { sp: m[1], ep: m[2] };
+  if (strict) return { sp:"", ep:"" };
+  // Fallback: put all into SP
+  return { sp: p, ep: "" };
+}
+
+function mapTypeToRIS(t) {
+  switch (t) {
+    case "article": return "JOUR";
+    case "book": return "BOOK";
+    case "inproceedings":
+    case "conference":
+    case "proceedings": return "CONF";
+    default: return "GEN";
+  }
+}
+
+function mapTypeToCSL(t) {
+  switch (t) {
+    case "article": return "article-journal";
+    case "book": return "book";
+    case "inproceedings":
+    case "conference": return "paper-conference";
+    default: return "document";
+  }
+}
+
+/* --- Converters --- */
+function toRIS(entries, opts) {
+  const out = [];
+  for (const e of entries) {
+    const f = e.fields;
+    out.push(`TY  - ${mapTypeToRIS(e.type)}`);
+    const authors = splitAuthors(f.author, opts.normalizeAuthors);
+    for (const a of authors) {
+      if (a.family !== undefined) out.push(`AU  - ${a.family}${a.given ? ", " + a.given : ""}`);
+      else out.push(`AU  - ${a.raw}`);
+    }
+    if (f.title) out.push(`TI  - ${f.title}`);
+    const year = (f.year || "").match(/\d{4}/)?.[0] || "";
+    if (year) out.push(`PY  - ${year}`);
+    const container = f.journal || f.booktitle || "";
+    if (container) out.push(`T2  - ${container}`);
+    if (f.publisher) out.push(`PB  - ${f.publisher}`);
+    if (f.volume) out.push(`VL  - ${f.volume}`);
+    const issue = f.number || f.issue || "";
+    if (issue) out.push(`IS  - ${issue}`);
+    const { sp, ep } = splitPages(f.pages, opts.strictPages);
+    if (sp) out.push(`SP  - ${sp}`);
+    if (ep) out.push(`EP  - ${ep}`);
+    if (f.doi) out.push(`DO  - ${f.doi}`);
+    if (f.url) out.push(`UR  - ${f.url}`);
+    if (opts.keepId && e.id) out.push(`ID  - ${e.id}`);
+    out.push("ER  - ");
+    out.push(""); // blank line between entries
+  }
+  return out.join("\n");
+}
+
+function toCSLJSON(entries, opts) {
+  const items = entries.map(e => {
+    const f = e.fields;
+    const year = (f.year || "").match(/\d{4}/)?.[0];
+    const authors = splitAuthors(f.author, opts.normalizeAuthors).map(a => {
+      if (a.family !== undefined) return { family: a.family, given: a.given || undefined };
+      return { literal: a.raw };
+    });
+    const pages = f.pages || undefined;
+    const item = {
+      type: mapTypeToCSL(e.type),
+      title: f.title || undefined,
+      author: authors.length ? authors : undefined,
+      issued: year ? { "date-parts": [[Number(year)]] } : undefined,
+      "container-title": (f.journal || f.booktitle) || undefined,
+      publisher: f.publisher || undefined,
+      volume: f.volume || undefined,
+      issue: (f.number || f.issue) || undefined,
+      page: pages,
+      DOI: f.doi || undefined,
+      URL: f.url || undefined
+    };
+    if (opts.keepId && e.id) item.id = e.id;
+    return item;
+  });
+  return JSON.stringify(items, null, 2);
+}
+
+function toCSV(entries, opts) {
+  const cols = ["id","type","title","authors","year","container","publisher","volume","issue","pages","doi","url"];
+  const lines = [];
+  lines.push(cols.join(","));
+  for (const e of entries) {
+    const f = e.fields;
+    const year = (f.year || "").match(/\d{4}/)?.[0] || "";
+    const authors = splitAuthors(f.author, opts.normalizeAuthors).map(a => {
+      if (a.family !== undefined) return `${a.family}${a.given ? " " + a.given : ""}`;
+      return a.raw;
+    }).join("; ");
+    const row = {
+      id: opts.keepId ? (e.id || "") : "",
+      type: e.type,
+      title: f.title || "",
+      authors,
+      year,
+      container: f.journal || f.booktitle || "",
+      publisher: f.publisher || "",
+      volume: f.volume || "",
+      issue: f.number || f.issue || "",
+      pages: f.pages || "",
+      doi: f.doi || "",
+      url: f.url || ""
+    };
+    const esc = v => `"${String(v).replace(/"/g,'""')}"`;
+    lines.push(cols.map(c => esc(row[c])).join(","));
+  }
+  return lines.join("\n");
+}
+
+function toSanitizedBibTeX(entries, opts) {
+  const out = [];
+  for (const e of entries) {
+    const f = e.fields;
+    const id = opts.keepId && e.id ? e.id : (e.id || "item");
+    out.push(`@${e.type}{${id},`);
+    const kv = [];
+    if (f.title) kv.push(`  title = {${f.title}}`);
+    if (f.author) {
+      const authors = splitAuthors(f.author, opts.normalizeAuthors).map(a => {
+        if (a.family !== undefined) return a.given ? `${a.family}, ${a.given}` : a.family;
+        return a.raw;
+      }).join(" and ");
+      kv.push(`  author = {${authors}}`);
+    }
+    if (f.journal) kv.push(`  journal = {${f.journal}}`);
+    if (f.booktitle) kv.push(`  booktitle = {${f.booktitle}}`);
+    if (f.publisher) kv.push(`  publisher = {${f.publisher}}`);
+    if (f.year) kv.push(`  year = {${(f.year.match(/\d{4}/)||[""])[0]}}`);
+    if (f.volume) kv.push(`  volume = {${f.volume}}`);
+    const issue = f.number || f.issue;
+    if (issue) kv.push(`  number = {${issue}}`);
+    if (f.pages) kv.push(`  pages = {${f.pages}}`);
+    if (f.doi) kv.push(`  doi = {${f.doi}}`);
+    if (f.url) kv.push(`  url = {${f.url}}`);
+    out.push(kv.join(",\n"));
+    out.push("}\n");
+  }
+  return out.join("\n");
+}
+
+/* --- Wire up UI --- */
+document.getElementById("langSel").addEventListener("change", e => {
+  applyLang(e.target.value);
+});
+
+document.getElementById("convert").addEventListener("click", () => {
+  const lang = document.getElementById("langSel").value;
+  const txt = document.getElementById("input").value.trim();
+  if (!txt) return alert(i18n[lang].noInput);
+  const fmt = document.getElementById("fmtSel").value;
+  const opts = {
+    keepId: document.getElementById("keepId").checked,
+    strictPages: document.getElementById("strictPages").checked,
+    normalizeAuthors: document.getElementById("normalizeAuthors").checked
+  };
+  const entries = parseBibTeX(txt);
+  let out = "";
+  switch (fmt) {
+    case "ris": out = toRIS(entries, opts); break;
+    case "csljson": out = toCSLJSON(entries, opts); break;
+    case "csv": out = toCSV(entries, opts); break;
+    case "sanitize": out = toSanitizedBibTeX(entries, opts); break;
+    default: out = "Unknown format.";
+  }
+  document.getElementById("output").value = out;
+});
+
+document.getElementById("copyOut").addEventListener("click", async () => {
+  const lang = document.getElementById("langSel").value;
+  try {
+    await navigator.clipboard.writeText(document.getElementById("output").value);
+    notify(i18n[lang].copyOk);
+  } catch {
+    alert(i18n[lang].copyFail);
+  }
+});
+
+document.getElementById("downloadOut").addEventListener("click", () => {
+  const fmt = document.getElementById("fmtSel").value;
+  const blob = new Blob([document.getElementById("output").value], { type: "text/plain;charset=utf-8" });
+  const a = document.createElement("a");
+  const ts = new Date().toISOString().replace(/[:.]/g,"-");
+  const name = `bib2x_${fmt}_${ts}.${fmt === "csljson" ? "json" : (fmt === "csv" ? "csv" : "txt")}`;
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(()=> URL.revokeObjectURL(a.href), 500);
+});
+
+document.getElementById("clearOut").addEventListener("click", () => {
+  document.getElementById("output").value = "";
+});
+
+document.getElementById("clearIn").addEventListener("click", () => {
+  document.getElementById("input").value = "";
+});
+
+document.getElementById("sampleIn").addEventListener("click", () => {
+  document.getElementById("input").value = `@article{doe2021sample,
+  title={An example article},
+  author={Doe, John and Roe, Jane},
+  journal={Journal of Examples},
+  year={2021},
+  volume={12},
+  number={3},
+  pages={45-67},
+  doi={10.1234/example},
+  url={https://example.org/article}
+}
+
+@book{roe2020book,
+  title={The Example Book},
+  author={Roe, Jane and Doe, John},
+  publisher={Example Press},
+  year={2020},
+  doi={10.5678/bookdoi},
+  url={https://example.org/book}
+}
+
+@inproceedings{doe2019conf,
+  title={Conference Paper Title},
+  author={Doe, John and Smith, Alex},
+  booktitle={Proceedings of ExampleConf},
+  year={2019},
+  pages={101-110},
+  url={https://example.org/conf}
+}`;
+});
+
+document.getElementById("loadFile").addEventListener("click", () => {
+  const file = document.getElementById("fileIn").files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById("input").value = String(e.target.result || "");
+  };
+  reader.readAsText(file);
+});
+
+document.getElementById("saveCfg").addEventListener("click", saveCfg);
+document.getElementById("loadCfg").addEventListener("click", loadCfg);
+
+/* Init */
+applyLang(document.getElementById("langSel").value);
+</script>
+</body>
+</html>
